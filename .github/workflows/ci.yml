@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      vikunja:
+        image: vikunja/vikunja:2.6.0
+        env:
+          VIKUNJA_SERVICE_PUBLICURL: http://localhost:3456/
+          VIKUNJA_SERVICE_SECRET: ci-test-secret-minimum-32-characters-long
+          VIKUNJA_DATABASE_TYPE: sqlite
+          VIKUNJA_DATABASE_PATH: /tmp/vikunja.db
+          VIKUNJA_SERVICE_ENABLEREGISTRATION: "true"
+        ports:
+          - 3456:3456
+        options: >-
+          --user 0
+          --tmpfs /app/vikunja/files
+          --tmpfs /tmp
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Wait for Vikunja to be ready
+        run: |
+          MAX_WAIT=60
+          WAITED=0
+          until curl -sf --connect-timeout 2 --max-time 3 http://localhost:3456/api/v1/info > /dev/null 2>&1; do
+            if [ "$WAITED" -ge "$MAX_WAIT" ]; then
+              echo "::error::Vikunja did not start within ${MAX_WAIT}s"
+              exit 1
+            fi
+            echo "Waiting for Vikunja... (${WAITED}/${MAX_WAIT}s)"
+            sleep 3
+            WAITED=$((WAITED + 3))
+          done
+          echo "Vikunja is ready at http://localhost:3456"
+
+      - name: Run smoke and regression tests
+        run: pytest -m "smoke or regression" --stand local -v
