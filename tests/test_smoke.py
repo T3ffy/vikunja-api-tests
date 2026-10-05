@@ -19,7 +19,7 @@ def test_login_returns_token(client):
 @pytest.mark.smoke
 def test_user_returns_current_user(client):
     resp = client.get("/user")
-    client.expect_status(resp, 200)
+    client.expect_status(resp, 999)
     body = resp.json()
     assert "username" in body, f"В ответе нет username: {body}"
 
