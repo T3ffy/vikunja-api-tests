@@ -1,5 +1,6 @@
 import pytest
-
+from clients.http_client import HttpClient
+from config import get_base_url
 
 @pytest.mark.smoke
 def test_info_available(client):
@@ -33,10 +34,9 @@ def test_projects_list_available(client):
 
 @pytest.mark.smoke
 def test_user_without_token_fails(client):
-    from clients.http_client import http_client
-    from config import get_base_url
+
 
     base_url = get_base_url("local")
-    anon = http_client(base_url=base_url)
+    anon = HttpClient(base_url=base_url)
     resp = anon.get("/user")
     client.expect_status(resp, 401, 403)

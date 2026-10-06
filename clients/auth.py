@@ -1,10 +1,10 @@
 import uuid
 import requests
 
-from clients.http_client import http_client
+from clients.http_client import HttpClient
 
 
-def register_and_login(client: http_client) -> str:
+def register_and_login(client: HttpClient) -> str:
     username = f"qa_{uuid.uuid4().hex[:8]}"
     password = "TestPass123!"
 

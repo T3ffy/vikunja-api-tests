@@ -1,6 +1,6 @@
 import requests
 
-class http_client:
+class HttpClient:
     def __init__(self, base_url: str, timeout: int = 10):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
