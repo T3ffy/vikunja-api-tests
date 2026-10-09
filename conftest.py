@@ -1,6 +1,7 @@
 import uuid
 import pytest
 
+
 from api import projects as projects_api
 from api import tasks as tasks_api
 from api import shares as shares_api
@@ -8,7 +9,6 @@ from api import teams as teams_api
 from config import get_base_url
 from clients.http_client import HttpClient
 from clients.auth import register_and_login
-
 
 def pytest_addoption(parser):
     parser.addoption(
