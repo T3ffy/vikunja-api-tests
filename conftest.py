@@ -113,3 +113,4 @@ def project_with_share(client, second_user, project_factory):
     resp = shares_api.share_project_with_user(client, project_id, second_username, right=1)
     client.expect_status(resp, 200, 201)
     return project_id, second_user
+
