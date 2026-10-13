@@ -1,63 +1,38 @@
-# Vikunja API Tests
-
+# Vikunja & Toolshop API Tests
 ![CI](https://github.com/T3ffy/vikunja-api-tests/actions/workflows/ci.yml/badge.svg?branch=main)
+Учебный проект автотестов на Python + pytest + requests + Schemathesis. Покрывает API Vikunja (проекты, задачи, вложения, шеринг) и Toolshop (авторизация и роли). 
 
-Каркас автотестов для API Vikunja на pytest + requests. Покрывает smoke-проверки
-критических путей: доступность API, авторизация, получение текущего пользователя,
-список проектов.
+## Зачем этот проект
 
-## Стек
+Отработка на учебных стендах тех же паттернов, что и в рабочем
+репозитории:
+
+- HTTP-клиент с `base_url`, `timeout`, `set_token`, `expect_status`;
+- авторизация через фикстуры;
+- выбор стенда через `--stand` + `envs/<stand>.env`;
+- фабрики с автоуборкой через `yield`;
+- contract-тестирование через Schemathesis;
+- работа с двумя стендами одного API (clean / with-bugs);
+- CI на GitHub Actions с артефактами.
+
+## Как поднять и запустить
+
+### Требования
 
 - Python 3.12
-- pytest
-- requests
-- GitHub Actions (CI)
+- Docker Desktop (для Vikunja)
+- Git
 
-## Матрица прав (Vikunja 2.6.0)
+### Клонирование и установка
 
-| Кто | Прочитать проект | Создать задачу | Изменить проект | Удалить проект | Выдать доступ дальше |
-|---|---|---|---|---|---|
-| Владелец | да | да | да | да | да |
-| Пользователь (right=0) | да | нет (403) | нет (403) | нет (403) | нет (403) |
-| Пользователь c write (right=1) | да | да | да | нет (403) | нет (403) |
-| Пользователь с admin (right=2) | да | да | да | да (200) | да |
-
-## Структура проекта
-
-    vikunja-api-tests/
-    ├── .github/
-    │   └── workflows/
-    │       └── ci.yml              # CI: push, pull_request
-    ├── clients/
-    │   ├── __init__.py
-    │   ├── http_client.py          # HttpClient: base_url, timeout, get/post/put/delete
-    │   └── auth.py                 # регистрация + логин
-    ├── envs/
-    │   └── local.env               # BASE_URL для локального стенда
-    ├── tests/
-    │   ├── __init__.py
-    │   └── test_smoke.py           # 5 smoke-тестов
-    ├── config.py                   # чтение envs/<stand>.env
-    ├── conftest.py                 # --stand, фикстура client
-    ├── pytest.ini                  # маркеры
-    ├── requirements.txt
-    └── README.md
-
-## Установка
-
-    git clone https://github.com/T3ffy/vikunja-api-tests
+    git clone <https://github.com/T3ffy/vikunja-api-tests.git>
     cd vikunja-api-tests
-
     py -3.12 -m venv .venv
-    .venv\Scripts\Activate.ps1          # Windows
-    # source .venv/bin/activate         # Linux / macOS
-
-    python -m pip install --upgrade pip
+    .venv\Scripts\Activate.ps1
     pip install -r requirements.txt
+    playwright install chromium
 
-## Запуск Vikunja локально
-
-Vikunja поднимается в Docker. Нужен Docker Desktop.
+### Vikunja локально
 
     docker run -d --name vikunja-ci --user 0 -p 3456:3456 `
       -e VIKUNJA_SERVICE_PUBLICURL=http://localhost:3456/ `
@@ -65,121 +40,121 @@ Vikunja поднимается в Docker. Нужен Docker Desktop.
       -e VIKUNJA_DATABASE_TYPE=sqlite `
       -e VIKUNJA_DATABASE_PATH=/tmp/vikunja.db `
       -e VIKUNJA_SERVICE_ENABLEREGISTRATION=true `
-      --tmpfs /app/vikunja/files `
-      --tmpfs /tmp `
+      --tmpfs /app/vikunja/files --tmpfs /tmp `
       vikunja/vikunja:2.6.0
 
-Проверка, что API отвечает:
+Проверка:
 
     curl.exe -s http://localhost:3456/api/v1/info
+    # {"version":"v2.6.0",...}
 
+### Прогон тестов
 
-Убрать контейнер:
-
-    docker rm -f vikunja-ci
-
-
-
-## Запуск тестов
-
-    # Smoke - быстрые проверки
+    # Smoke — быстрые проверки
     pytest -m smoke --stand local -v
 
     # Smoke + regression
     pytest -m "smoke or regression" --stand local -v
 
-    # Всё
-    pytest --stand local -v
+    # Всё, кроме contract и Toolshop
+    pytest -m "smoke or regression" --stand local -v `
+      --ignore=tests/contract --ignore=tests/toolshop
 
-### Опция --stand
+    # Contract-тесты (только локально, шумный прогон)
+    pytest tests/contract/ -v --stand local
 
-Стенд задаётся файлом `envs/<stand>.env`. По умолчанию `local`.
+    # Toolshop — чистый стенд
+    pytest tests/toolshop/ -v --stand pst-clean
 
-Добавить новый стенд:
+    # Toolshop — стенд с багами
+    pytest tests/toolshop/ -v -rx --stand pst-bugs
 
-1. Создать `envs/dev.env`:
+### HTML-отчёт
 
-        BASE_URL=https://dev.vikunja.example.com/api/v1
+    pytest -m "smoke or regression" --stand local -v `
+      --html=reports/report.html --self-contained-html
 
-2. Запустить:
+    start reports\report.html
 
-        pytest -m smoke --stand dev -v
+### В CI
+
+CI запускается на push и pull_request в `main`. Открыть вкладку Actions репозитория, скачать артефакт `pytest-html-report` после прогона.
+
+## Структура
+
+    vikunja-api-tests/
+    ├── .github/workflows/ci.yml       # CI
+    ├── api/                            # обёртки над эндпоинтами Vikunja
+    │   ├── projects.py
+    │   ├── tasks.py
+    │   ├── teams.py
+    │   ├── shares.py
+    │   └── attachments.py
+    ├── clients/                        # низкоуровневый клиент
+    │   ├── http_client.py              # HttpClient
+    │   └── auth.py                     # register_and_login
+    ├── envs/                           # стенды
+    │   ├── local.env
+    │   ├── pst-clean.env
+    │   └── pst-bugs.env
+    ├── tests/                          # тесты
+    │   ├── conftest.py
+    │   ├── test_smoke.py
+    │   ├── test_projects.py
+    │   ├── test_task.py
+    │   ├── test_shares.py
+    │   ├── test_teams.py
+    │   ├── test_attachments.py
+    │   ├── contract/                   # contract-тесты Schemathesis
+    │   │   ├── test_contract_get.py
+    │   │   └── test_known_bugs.py
+    │   └── toolshop/                   # Toolshop
+    │       ├── conftest.py
+    │       └── test_auth_roles.py
+    ├── config.py                       # чтение envs/<stand>.env
+    ├── conftest.py                     # --stand, общие фикстуры
+    ├── pytest.ini
+    └── README.md
+
+## Матрица прав Vikunja
+
+Проверено на Vikunja 2.6.0. Уровни доступа:
+
+| right | Что значит |
+|---|---|
+| 0 | Read only |
+| 1 | Read + Write |
+| 2 | Admin (управляет шерингом) |
+
+Что может каждый уровень в чужом проекте:
+
+| Кто | Прочитать | Создать задачу | Изменить проект | Удалить проект | Расшарить дальше |
+|---|---|---|---|---|---|
+| Владелец | да | да | да | да | да |
+| right=0 | да | нет (403) | нет (403) | нет (403) | нет (403) |
+| right=1 | да | да | да | нет (403) | нет (403) |
+| right=2 | да | да | да | да (200) | да |
 
 
-## Маркеры
+Admin получает все права владельца, кроме смены владельца.
 
-Маркер       - Что означает                                                 
+## Дефекты
 
-- `smoke`      - Быстрые проверки критических путей: доступность, авторизация 
-- `regression` - Полный набор функциональных тестов                           
-- `mutating`   - Тесты, которые создают/меняют/удаляют данные                 
-- `contract`   - Проверки контракта API: обязательные поля, типы, схемы       
+- **VK-001 / VK-002**: PUT на `webhooks/events` и `buckets/tasks`
+  возвращает `400` вместо `405` (Vikunja).
+- **VK-003**: `/avatar/{username}` отдаёт `image/svg+xml` вместо
+  `application/octet-stream` (ошибка спецификации).
+- **TS-001**: BOLA - customer читает чужой профиль (Toolshop pst-bugs).
+- **TS-002**: Excessive Data Exposure - `password`, `role` в ответе
+  `/users/{id}` (Toolshop pst-bugs).
+- **TS-003**: BFLA - customer удаляет бренд (Toolshop pst-bugs).
 
-В CI запускаются только `smoke` и `regression`. Маркеры `mutating` и `contract`
-гоняются локально или в отдельном пайплайне.
+## Что бы сделал дальше
 
-## Что покрыто
-
-Smoke-тесты (`tests/test_smoke.py`):
-
-- `/info` отвечает и версия 2.6.0
-- логин выдаёт токен
-- `/user` возвращает того, кто вошёл
-- список проектов доступен
-- без токена `/user` не отдаётся
-
-## CI
-
-`.github/workflows/ci.yml` запускается на push и pull_request.
-
-Что делает:
-
-1. Поднимает Vikunja `2.6.0` как service-контейнер на порту 3456.
-2. Ставит Python 3.12 и зависимости из `requirements.txt`.
-3. Ждёт готовности API через curl (`/api/v1/info`), максимум 60 секунд.
-4. Гоняет `pytest -m "smoke or regression" --stand local -v`.
-
-Локально можно эмулировать то же самое:
-
-    docker run -d --name vikunja-ci --user 0 -p 3456:3456 \
-      -e VIKUNJA_SERVICE_ENABLEREGISTRATION=true \
-      -e VIKUNJA_SERVICE_SECRET=ci-test-secret-minimum-32-characters-long \
-      -e VIKUNJA_DATABASE_TYPE=sqlite \
-      -e VIKUNJA_DATABASE_PATH=/tmp/vikunja.db \
-      --tmpfs /app/vikunja/files \
-      --tmpfs /tmp \
-      vikunja/vikunja:2.6.0
-
-    pytest -m "smoke or regression" --stand local -v
-
-
-### `http_сlient`
-
-Базовый HTTP-клиент. Хранит `base_url`, `timeout`, заголовки и токен.
-
-- `get/post/put/delete(path, **kwargs)` - методы запросов.
-- `set_token(token)` - устанавливает Bearer-токен для всех последующих запросов.
-- `expect_status(response, *codes)` - проверяет статус-код; при несовпадении
-  падает с сообщением, в котором есть метод, URL, ожидаемые коды,
-  фактический код и первые 200 символов тела.
-
-`expect_status` -  Когда тест падает, в трейсе видно, что именно пошло не так. Например, при rate limit Vikunja
-возвращает 429, и в сообщении видно `{"message":"Too Many Requests"}`
-
-### Фикстура `client`
-
-    @pytest.fixture(scope="session")
-    def client(stand: str) -> HttpClient:
-        base_url = get_base_url(stand)
-        http = HttpClient(base_url=base_url)
-        register_and_login(http)
-        return http
-
-Один авторизованный клиент на весь прогон. `scope="session"` - потому что
-Vikunja ограничивает частоту регистраций/
-
-### `config.py` + `envs/`
-
-`config.py` читает переменные из `envs/<stand>.env`. Формат - простые
-`KEY=VALUE`, по строке на переменную. 
-
+1. Расширил contract-тесты добавил бы к GET ещё POST/PUT/DELETE.
+2. Перешёл на Allure для более наглядных отчётов в CI.
+3. Добавил ночной-прогон regression-тестов по расписанию.
+4. Покрыл Toolshop большим набором тестов.
+5. Ускорил CI через кэш `pip`, параллельные job.
+6. Добавил UI тесты с Page Object
+7. Дабавил прогон с уведомлением в Telegram при падении.
